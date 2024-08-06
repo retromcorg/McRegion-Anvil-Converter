@@ -8,13 +8,29 @@ package net.minecraft.world.level.storage;
 
 
 import java.io.File;
+import java.util.concurrent.TimeUnit;
 
 public class AnvilConverter {
 
     public static void main(String[] args) {
-
-        if (args.length != 2) {
+        if (args.length < 2) {
             printUsageAndExit();
+        }
+
+        // Handle optional third argument for number of threads
+        int numThreads = 1;
+        if (args.length == 3) {
+            try {
+                numThreads = Integer.parseInt(args[2]);
+                if (numThreads < 0) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException e) {
+                System.err.println("Invalid number of threads: " + args[2]);
+                System.out.println("");
+                printUsageAndExit();
+                return;
+            }
         }
 
         File baseFolder;
@@ -40,7 +56,40 @@ public class AnvilConverter {
             return;
         }
 
+        // Remove old .mca region files if they exist (they will be regenerated)
+        File regionFolder = new File(baseFolder, args[1] + "/region");
+        int regionCount = 0;
+        if (regionFolder.exists()) {
+            File[] regionFiles = regionFolder.listFiles();
+            if (regionFiles != null) {
+                for (File regionFile : regionFiles) {
+                    if (regionFile.getName().endsWith(".mca")) {
+                        regionFile.delete();
+                        regionCount++;
+                    }
+                }
+            }
+        }
+        if (regionCount > 0) {
+            System.out.println("Deleted " + regionCount + " old mca region files");
+        }
+
+        // Rename level.dat_mcr to level.dat
+        File levelDatMcr = new File(baseFolder, args[1] + "/level.dat_mcr");
+        File levelDat = new File(baseFolder, args[1] + "/level.dat");
+        if (levelDatMcr.exists()) {
+            if (levelDat.exists()) {
+                levelDat.delete();
+            }
+            levelDatMcr.renameTo(levelDat);
+            System.out.println("Renamed level.dat_mcr to level.dat");
+        }
+
         System.out.println("Converting map!");
+
+        // Duration duration = new Duration();
+        long startTime = System.currentTimeMillis();
+
         storage.convertLevel(args[1], new ProgressListener() {
             private long timeStamp = System.currentTimeMillis();
 
@@ -59,7 +108,25 @@ public class AnvilConverter {
 
             public void progressStage(String string) {
             }
-        });
+        }, numThreads);
+
+        long endTime = System.currentTimeMillis();
+        long durationMillis = endTime - startTime;
+
+        // Calculate minutes, seconds, and milliseconds
+        long hours = TimeUnit.MILLISECONDS.toHours(durationMillis);
+        long minutes = TimeUnit.MILLISECONDS.toMinutes(durationMillis) -
+                TimeUnit.HOURS.toMinutes(hours);
+        long seconds = TimeUnit.MILLISECONDS.toSeconds(durationMillis) -
+                TimeUnit.MINUTES.toSeconds(minutes);
+        long millis = durationMillis - TimeUnit.MINUTES.toMillis(minutes) -
+                TimeUnit.SECONDS.toMillis(seconds);
+
+        // Format and print the duration time
+        String duration = String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis);
+        System.out.println("Conversion completed in: " + duration);
+
+
         System.out.println("Done!");
         System.out.println("To revert, replace level.dat with level.dat_mcr. Old mcr region files have not been modified.");
     }

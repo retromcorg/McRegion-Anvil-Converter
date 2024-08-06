@@ -6,14 +6,18 @@ package net.minecraft.world.level.storage;
  * Don't do evil.
  */
 
+import com.mojang.nbt.CompoundTag;
+import com.mojang.nbt.NbtIo;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.chunk.storage.OldChunkStorage;
+import net.minecraft.world.level.chunk.storage.OldChunkStorage.OldLevelChunk;
+import net.minecraft.world.level.chunk.storage.RegionFile;
+
 import java.io.*;
 import java.util.ArrayList;
-
-import net.minecraft.world.level.biome.BiomeSource;
-import net.minecraft.world.level.chunk.storage.*;
-import net.minecraft.world.level.chunk.storage.OldChunkStorage.OldLevelChunk;
-
-import com.mojang.nbt.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class AnvilLevelStorageSource {
 
@@ -79,7 +83,7 @@ public class AnvilLevelStorageSource {
         }
     }
 
-    public boolean convertLevel(String levelId, ProgressListener progress) {
+    public boolean convertLevel(String levelId, ProgressListener progress, int threadCount) {
 
         progress.progressStagePercentage(0);
 
@@ -109,12 +113,23 @@ public class AnvilLevelStorageSource {
 
         CompoundTag levelData = getDataTagFor(levelId);
 
+        //int threadCount = Runtime.getRuntime().availableProcessors();
+
+        // Print in what mode we are running
+        if (threadCount == 0) {
+            System.out.println("Running sequentially");
+        } else {
+            System.out.println("Running " + threadCount + " threads in parallel");
+        }
+
+        AtomicInteger currentCount = new AtomicInteger(0);
+
         // convert normal world
-        convertRegions(new File(baseFolder, "region"), normalRegions, null, 0, totalCount, progress);
+        convertRegions(new File(baseFolder, "region"), normalRegions, null, currentCount, totalCount, progress, threadCount);
         // convert hell world
-        convertRegions(new File(netherFolder, "region"), netherRegions, null, normalRegions.size(), totalCount, progress);
+        convertRegions(new File(netherFolder, "region"), netherRegions, null, currentCount, totalCount, progress, threadCount);
         // convert end world
-        convertRegions(new File(enderFolder, "region"), enderRegions, null, normalRegions.size() + netherRegions.size(), totalCount, progress);
+        convertRegions(new File(enderFolder, "region"), enderRegions, null, currentCount, totalCount, progress, threadCount);
 
         makeMcrLevelDatBackup(levelId);
 
@@ -143,19 +158,40 @@ public class AnvilLevelStorageSource {
         }
     }
 
-    private void convertRegions(File baseFolder, ArrayList<File> regionFiles, BiomeSource biomeSource, int currentCount, int totalCount, ProgressListener progress) {
+    private void convertRegions(File baseFolder, ArrayList<File> regionFiles, BiomeSource biomeSource, AtomicInteger currentCount, int totalCount, ProgressListener progress, int numThreads) {
+        // Create an ExecutorService with a fixed thread pool
 
-        for (File regionFile : regionFiles) {
-            convertRegion(baseFolder, regionFile, biomeSource, currentCount, totalCount, progress);
+        if (numThreads <= 0) {
+            //Program is being run sequentially
+            for (File regionFile : regionFiles) {
+                convertRegion(baseFolder, regionFile, biomeSource, currentCount, totalCount, progress);
+            }
+        } else {
+            //Program is being run in parallel
+            ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
 
-            currentCount++;
-            int percent = (int) Math.round(100.0d * (double) currentCount / (double) totalCount);
-            progress.progressStagePercentage(percent);
+            // Submit tasks for each region file
+            for (File regionFile : regionFiles) {
+                executorService.submit(() -> {
+                    convertRegion(baseFolder, regionFile, biomeSource, currentCount, totalCount, progress);
+                });
+            }
+
+            // Shut down the executor service and wait for all tasks to complete
+            executorService.shutdown();
+            try {
+                executorService.awaitTermination(Long.MAX_VALUE, java.util.concurrent.TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
+        // Update progress after all tasks are completed
+        int percent = (int) Math.round(100.0d * (double) totalCount / (double) totalCount);
+        progress.progressStagePercentage(percent);
     }
 
-    private void convertRegion(File baseFolder, File regionFile, BiomeSource biomeSource, int currentCount, int totalCount, ProgressListener progress) {
+    private void convertRegion(File baseFolder, File regionFile, BiomeSource biomeSource, AtomicInteger currentCounter, int totalCount, ProgressListener progress) {
 
         try {
             String name = regionFile.getName();
@@ -189,12 +225,19 @@ public class AnvilLevelStorageSource {
                         }
                     }
                 }
+
+                // Update progress
+                int currentCount = currentCounter.get();
+
                 int basePercent = (int) Math.round(100.0d * (double) (currentCount * 1024) / (double) (totalCount * 1024));
                 int newPercent = (int) Math.round(100.0d * (double) ((x + 1) * 32 + currentCount * 1024) / (double) (totalCount * 1024));
                 if (newPercent > basePercent) {
                     progress.progressStagePercentage(newPercent);
                 }
             }
+
+            // Increment the counter
+            currentCounter.incrementAndGet();
 
             regionSource.close();
             regionDest.close();
