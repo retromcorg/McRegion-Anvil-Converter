@@ -113,19 +113,15 @@ public class AnvilConverter {
         long endTime = System.currentTimeMillis();
         long durationMillis = endTime - startTime;
 
-        // Calculate minutes, seconds, and milliseconds
+        // Calculate hours, minutes, and seconds
         long hours = TimeUnit.MILLISECONDS.toHours(durationMillis);
         long minutes = TimeUnit.MILLISECONDS.toMinutes(durationMillis) -
                 TimeUnit.HOURS.toMinutes(hours);
         long seconds = TimeUnit.MILLISECONDS.toSeconds(durationMillis) -
-                TimeUnit.MINUTES.toSeconds(minutes);
-        long millis = durationMillis - TimeUnit.MINUTES.toMillis(minutes) -
-                TimeUnit.SECONDS.toMillis(seconds);
+                TimeUnit.MINUTES.toSeconds(TimeUnit.MILLISECONDS.toMinutes(durationMillis));
 
-        // Format and print the duration time
-        String duration = String.format("%02d:%02d:%02d.%03d", hours, minutes, seconds, millis);
+        String duration = String.format("%02d:%02d:%02d", hours, minutes, seconds);
         System.out.println("Conversion completed in: " + duration);
-
 
         System.out.println("Done!");
         System.out.println("To revert, replace level.dat with level.dat_mcr. Old mcr region files have not been modified.");
