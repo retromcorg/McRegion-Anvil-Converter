@@ -133,15 +133,20 @@ public class AnvilConverter {
 
     private static void printUsageAndExit() {
         System.out.println("Map converter for Minecraft, from format \"McRegion\" to \"Anvil\". (c) Mojang AB 2012");
-        System.out.println("");
+        System.out.println("Forked by RhysB to include multi-threaded conversion support.");
+        System.out.println();
         System.out.println("Usage:");
-        System.out.println("\tjava -jar AnvilConverter.jar <base folder> <world name>");
+        System.out.println("\tjava -jar AnvilConverter.jar <base folder> <world name> [thread count]");
         System.out.println("Where:");
         System.out.println("\t<base folder>\tThe full path to the folder containing Minecraft world folders");
         System.out.println("\t<world name>\tThe folder name of the Minecraft world to be converted");
+        System.out.println("\t[thread count]\t(Optional) Number of threads to use for conversion. Defaults to 1 if not specified.");
         System.out.println("Example:");
-        System.out.println("\tjava -jar AnvilConverter.jar /home/jeb_/minecraft world");
+        System.out.println("\tjava -jar AnvilConverter.jar /home/jeb_/minecraft world - Convert world using 1 thread");
+        System.out.println("\tjava -jar AnvilConverter.jar /home/jeb_/minecraft world 0 - Convert world sequentially on the main thread");
+        System.out.println("\tjava -jar AnvilConverter.jar /home/jeb_/minecraft world 4 - Convert world using 4 threads");
         System.exit(1);
     }
+
 
 }
